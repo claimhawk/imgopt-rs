@@ -144,34 +144,65 @@ fn run_app() -> Result<()> {
 }
 
 fn show_drop_zone(stdout: &mut io::Stdout) -> Result<()> {
-    queue!(
-        stdout,
-        cursor::MoveTo(2, 2),
-        SetForegroundColor(Color::Blue),
-        Print("╔════════════════════════════════════════╗"),
-        cursor::MoveTo(2, 3),
-        Print("║                                        ║"),
-        cursor::MoveTo(2, 4),
-        Print("║      📸  IMAGE OPTIMIZER  📸          ║"),
-        cursor::MoveTo(2, 5),
-        Print("║                                        ║"),
-        cursor::MoveTo(2, 6),
-        Print("║      Drop images here                  ║"),
-        cursor::MoveTo(2, 7),
-        Print("║      480-720px clamping                ║"),
-        cursor::MoveTo(2, 8),
-        Print("║                                        ║"),
-        cursor::MoveTo(2, 9),
-        SetForegroundColor(Color::DarkGrey),
-        Print("║      (ESC or Ctrl+C to quit)           ║"),
-        SetForegroundColor(Color::Blue),
-        cursor::MoveTo(2, 10),
-        Print("║                                        ║"),
-        cursor::MoveTo(2, 11),
-        Print("╚════════════════════════════════════════╝"),
-        ResetColor,
-        cursor::Hide,
-    )?;
+    let (width, height) = terminal::size()?;
+    let center_y = height / 2;
+
+    // Simple mode for narrow terminals
+    if width < 50 {
+        let lines = vec![
+            "📸 IMAGE OPTIMIZER",
+            "Drop images here",
+            "480-720px",
+            "(ESC to quit)",
+        ];
+
+        for (i, line) in lines.iter().enumerate() {
+            let x = (width.saturating_sub(line.len() as u16)) / 2;
+            queue!(
+                stdout,
+                cursor::MoveTo(x, center_y.saturating_sub(2) + i as u16),
+                SetForegroundColor(if i == 0 { Color::Blue } else { Color::White }),
+                Print(line),
+                ResetColor,
+            )?;
+        }
+    } else {
+        // Full box mode for wider terminals
+        let box_width = 44;
+        let box_height = 10;
+        let start_x = (width.saturating_sub(box_width)) / 2;
+        let start_y = (height.saturating_sub(box_height)) / 2;
+
+        queue!(
+            stdout,
+            cursor::MoveTo(start_x, start_y),
+            SetForegroundColor(Color::Blue),
+            Print("╔════════════════════════════════════════╗"),
+            cursor::MoveTo(start_x, start_y + 1),
+            Print("║                                        ║"),
+            cursor::MoveTo(start_x, start_y + 2),
+            Print("║      📸  IMAGE OPTIMIZER  📸          ║"),
+            cursor::MoveTo(start_x, start_y + 3),
+            Print("║                                        ║"),
+            cursor::MoveTo(start_x, start_y + 4),
+            Print("║      Drop images here                  ║"),
+            cursor::MoveTo(start_x, start_y + 5),
+            Print("║      480-720px clamping                ║"),
+            cursor::MoveTo(start_x, start_y + 6),
+            Print("║                                        ║"),
+            cursor::MoveTo(start_x, start_y + 7),
+            SetForegroundColor(Color::DarkGrey),
+            Print("║      (ESC or Ctrl+C to quit)           ║"),
+            SetForegroundColor(Color::Blue),
+            cursor::MoveTo(start_x, start_y + 8),
+            Print("║                                        ║"),
+            cursor::MoveTo(start_x, start_y + 9),
+            Print("╚════════════════════════════════════════╝"),
+            ResetColor,
+        )?;
+    }
+
+    queue!(stdout, cursor::Hide)?;
     stdout.flush()?;
     Ok(())
 }
@@ -179,9 +210,13 @@ fn show_drop_zone(stdout: &mut io::Stdout) -> Result<()> {
 fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
     execute!(stdout, terminal::Clear(ClearType::All), cursor::MoveTo(0, 0))?;
 
+    let (term_width, term_height) = terminal::size()?;
+    let center_x = term_width / 2;
+    let center_y = term_height / 2;
+
     queue!(
         stdout,
-        cursor::MoveTo(2, 5),
+        cursor::MoveTo(center_x.saturating_sub(10), center_y.saturating_sub(3)),
         SetForegroundColor(Color::Yellow),
         Print("⚡ Processing image..."),
         ResetColor,
@@ -193,7 +228,7 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
     if !path_obj.exists() {
         queue!(
             stdout,
-            cursor::MoveTo(2, 7),
+            cursor::MoveTo(center_x.saturating_sub(7), center_y.saturating_sub(1)),
             SetForegroundColor(Color::Red),
             Print("❌ File not found"),
             ResetColor,
@@ -208,7 +243,7 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
         Err(_) => {
             queue!(
                 stdout,
-                cursor::MoveTo(2, 7),
+                cursor::MoveTo(center_x.saturating_sub(10), center_y.saturating_sub(1)),
                 SetForegroundColor(Color::Red),
                 Print("❌ Could not open image"),
                 ResetColor,
@@ -219,12 +254,13 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
     };
 
     let (width, height) = img.dimensions();
+    let orig_text = format!("Original: {}x{}px", width, height);
 
     queue!(
         stdout,
-        cursor::MoveTo(2, 7),
+        cursor::MoveTo(center_x.saturating_sub((orig_text.len() / 2) as u16), center_y.saturating_sub(1)),
         SetForegroundColor(Color::DarkYellow),
-        Print(format!("Original: {}x{}px", width, height)),
+        Print(&orig_text),
         ResetColor,
     )?;
     stdout.flush()?;
@@ -249,11 +285,12 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
         (width, height)
     };
 
+    let opt_text = format!("Optimized: {}x{}px", new_width, new_height);
     queue!(
         stdout,
-        cursor::MoveTo(2, 8),
+        cursor::MoveTo(center_x.saturating_sub((opt_text.len() / 2) as u16), center_y),
         SetForegroundColor(Color::Green),
-        Print(format!("Optimized: {}x{}px", new_width, new_height)),
+        Print(&opt_text),
         ResetColor,
     )?;
     stdout.flush()?;
@@ -266,7 +303,7 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
     if resized.save(temp_path).is_err() {
         queue!(
             stdout,
-            cursor::MoveTo(2, 10),
+            cursor::MoveTo(center_x.saturating_sub(13), center_y + 2),
             SetForegroundColor(Color::Red),
             Print("❌ Failed to save temp file"),
             ResetColor,
@@ -289,10 +326,10 @@ fn process_image(stdout: &mut io::Stdout, path: &str) -> Result<()> {
 
     queue!(
         stdout,
-        cursor::MoveTo(2, 10),
+        cursor::MoveTo(center_x.saturating_sub(12), center_y + 2),
         SetForegroundColor(Color::Green),
         Print("✅ Copied to clipboard!"),
-        cursor::MoveTo(2, 12),
+        cursor::MoveTo(center_x.saturating_sub(14), center_y + 4),
         SetForegroundColor(Color::DarkGreen),
         Print("Ready to paste into Claude..."),
         ResetColor,
